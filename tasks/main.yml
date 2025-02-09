@@ -1,6 +1,45 @@
 ---
 # tasks file for ansible_galaxy_role_kerberos
 
-- name: "kerberos | test"
+- name: "Kerberos | Install required package"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  apt:
+    pkg:
+      - gpg
+    state: present
+    update_cache: yes
+
+- name: "Kerberos | Download source code"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.get_url:
+    url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz
+    dest: /usr/local/src
+
+- name: "Kerberos | Download signature file"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.get_url:
+    url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz.asc
+    dest: /tmp
+
+- name: "Kerberos | Verify source code by GPG"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.command: gpg --verify /tmp/krb5-1.21.3.tar.gz.asc /usr/local/src/krb5-1.21.3.tar.gz
+  register: kerberos_gpg_verify
+
+- name: "Kerberos | Succeeded to verify"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.debug:
-    msg: "test"
+    msg: "GPG検証が成功しました。"
+  when: kerberos_gpg_verify.rc == 0
+
+- name: "Kerberos | Failed to verify"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.debug:
+    msg: "GPG検証が失敗しました。"
+  when: kerberos_gpg_verify.rc != 0
