@@ -10,6 +10,14 @@
     state: present
     update_cache: yes
 
+- name: "Kerberos | Import and trust GPG public key(s)"
+  ansible.builtin.include_tasks:
+    file: ./roles/kerberos/tasks/gpg_import_trust.yml
+  vars:
+    file_name: "{{ item }}"
+  with_items:
+    - 0CBA08575F8372DF
+
 - name: "Kerberos | Download source code"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
