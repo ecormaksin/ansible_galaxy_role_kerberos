@@ -17,6 +17,8 @@
     file_name: "{{ item }}"
   with_items:
     - 0CBA08575F8372DF
+    - A32F17FD0055C305
+    - CFE28FC7253AAB87
 
 - name: "Kerberos | Download source code"
   become: true
