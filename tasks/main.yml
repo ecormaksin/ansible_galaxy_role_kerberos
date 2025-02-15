@@ -53,3 +53,34 @@
   ansible.builtin.debug:
     msg: "GPG検証が失敗しました。"
   when: kerberos_gpg_verify.rc != 0
+
+- name: "Kerberos | Unpack source code"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  unarchive:
+    remote_src: yes
+    src: /usr/local/src/krb5-1.21.3.tar.gz
+    dest: /usr/local/src
+
+- name: "Kerberos | Install required packeges for build"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - bison
+      - libssl-dev
+      - libkrb5-dev
+    state: present
+
+- name: "Kerberos | Build source code"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.shell:
+    cmd: |
+      ./configure && \
+      make && \
+      make install && \
+      make clean && \
+      make distclean
+    chdir: /usr/local/src/krb5-1.21.3/src
