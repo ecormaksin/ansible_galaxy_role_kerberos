@@ -1,12 +1,16 @@
 ---
 # tasks file for ansible_galaxy_role_kerberos
 
-- name: "Kerberos | Install required package"
+- name: "Kerberos | Install required packages"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   apt:
     pkg:
       - gpg
+      - build-essential
+      - bison
+      - libssl-dev
+      - libkrb5-dev
     state: present
     update_cache: yes
 
@@ -62,25 +66,30 @@
     src: /usr/local/src/krb5-1.21.3.tar.gz
     dest: /usr/local/src
 
-- name: "Kerberos | Install required packeges for build"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.apt:
-    name:
-      - build-essential
-      - bison
-      - libssl-dev
-      - libkrb5-dev
-    state: present
-
 - name: "Kerberos | Build source code"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.shell:
     cmd: |
-      ./configure && \
-      make && \
-      make install && \
-      make clean && \
+      ./configure
+      make
+      make install
+      make clean
       make distclean
     chdir: /usr/local/src/krb5-1.21.3/src
+
+- name: "Kerberos | Copy krb5.conf"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: krb5.conf
+    dest: /usr/local/etc
+    mode: "775"
+
+- name: "Kerberos | Copy kdc.conf"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: kdc.conf
+    dest: /usr/local/var/krb5kdc
+    mode: "775"
