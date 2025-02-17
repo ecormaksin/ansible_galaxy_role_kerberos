@@ -4,15 +4,18 @@
 - name: "Kerberos | Install required packages"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  apt:
+  ansible.builtin.apt:
     pkg:
       - gpg
       - build-essential
       - bison
       - libssl-dev
       - libkrb5-dev
+      - expect
     state: present
     update_cache: yes
+  tags:
+    - packages
 
 - name: "Kerberos | Import and trust GPG public key(s)"
   ansible.builtin.include_tasks:
@@ -93,3 +96,22 @@
     src: kdc.conf
     dest: /usr/local/var/krb5kdc
     mode: "775"
+
+- name: "Kerberos | Copy an expect script to create KDC database"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: create_kdc_database.exp
+    dest: /tmp
+    owner: root
+    mode: "775"
+
+- name: "Kerberos | Execute an expect script to create KDC database"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.shell:
+    cmd: |
+      export KDC_MASTER_PASSWORD="{{ kdc_master_password }}"
+      ./create_kdc_database.exp
+      unset KDC_MASTER_PASSWORD
+    chdir: /tmp
