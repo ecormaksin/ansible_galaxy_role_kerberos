@@ -1,2 +1,3 @@
 files/kdc.conf
 files/krb5.conf
+files/kadm5.acl

@@ -115,3 +115,11 @@
       ./create_kdc_database.exp
       unset KDC_MASTER_PASSWORD
     chdir: /tmp
+
+- name: "Kerberos | Add administrators to the ACL file"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: kadm5.acl
+    dest: /usr/local/var/krb5kdc
+    mode: "775"
