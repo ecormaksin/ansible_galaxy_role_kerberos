@@ -1,0 +1,21 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+set user $env(MY_KERBEROS_ADMIN_PRINCIPAL)
+set password $env(MY_KERBEROS_ADMIN_PASSWORD)
+
+spawn kadmin.local
+
+expect "kadmin.local:"
+send "addprinc ${user}\r"
+
+expect "Enter password for principal \"${user}\":"
+send -- "${password}\r"
+
+expect "Re-enter password for principal \"${user}\":"
+send -- "${password}\r"
+
+expect "kadmin.local:"
+send "quit\r"
+
+expect eof

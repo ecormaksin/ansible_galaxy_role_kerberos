@@ -1,23 +1,15 @@
 #!/usr/bin/expect -f
+
 set timeout -1
+set realm $env(KDC_MY_REALM)
 set password $env(KDC_MASTER_PASSWORD)
 
-spawn kdb5_util create -s
+spawn kdb5_util create -r "${realm}" -s
 
-expect {
-    "Enter KDC database master key:" {
-        send "$password\r"
-        exp_continue
-    }
-    "Re-enter KDC database master key to verify:" {
-        send "$password\r"
-    }
-    timeout {
-        puts "タイムアウトエラーが発生しました"
-        exit 1
-    }
-    eof {
-        puts "予期せぬ終了が発生しました"
-        exit 1
-    }
-}
+expect "Enter KDC database master key:"
+send -- "${password}\r"
+
+expect "Re-enter KDC database master key to verify:"
+send -- "${password}\r"
+
+expect eof

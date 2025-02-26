@@ -97,24 +97,36 @@
     dest: /usr/local/var/krb5kdc
     mode: "775"
 
-- name: "Kerberos | Copy an expect script to create KDC database"
+- name: "Kerberos | Check the Kerberos database"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.copy:
-    src: create_kdc_database.exp
-    dest: /tmp
-    owner: root
-    mode: "775"
+  ansible.builtin.stat:
+    path: /usr/local/var/krb5kdc/principal
+  register: kerberos_database_path
 
-- name: "Kerberos | Execute an expect script to create KDC database"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.shell:
-    cmd: |
-      export KDC_MASTER_PASSWORD="{{ kdc_master_password }}"
-      ./create_kdc_database.exp
-      unset KDC_MASTER_PASSWORD
-    chdir: /tmp
+- block:
+    - name: "Kerberos | Copy an expect script to create KDC database"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.copy:
+        src: create_kdc_database.exp
+        dest: /tmp
+        owner: root
+        mode: "775"
+
+    - name: "Kerberos | Execute an expect script to create KDC database"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.shell:
+        cmd: |
+          export KDC_MY_REALM="{{ kdc_my_realm }}"
+          export KDC_MASTER_PASSWORD="{{ kdc_master_password }}"
+          ./create_kdc_database.exp
+          unset KDC_MY_REALM
+          unset KDC_MASTER_PASSWORD
+        chdir: /tmp
+
+  when: (not kerberos_database_path.stat.exists)
 
 - name: "Kerberos | Add administrators to the ACL file"
   become: true
@@ -123,3 +135,24 @@
     src: kadm5.acl
     dest: /usr/local/var/krb5kdc
     mode: "775"
+
+- name: "Kerberos | Copy an expect script to add administrators to the Kerberos database"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: add_admin_to_kerberos_database.exp
+    dest: /tmp
+    owner: root
+    mode: "775"
+
+- name: "Kerberos | Execute an expect script to add administrators to the Kerberos database"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.shell:
+    cmd: |
+      export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos_my_admin_principal }}@{{ kdc_my_realm }}"
+      export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos_my_admin_password }}"
+      ./add_admin_to_kerberos_database.exp
+      unset MY_KERBEROS_ADMIN_PRINCIPAL
+      unset MY_KERBEROS_ADMIN_PASSWORD
+    chdir: /tmp
