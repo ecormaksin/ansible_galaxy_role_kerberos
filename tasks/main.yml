@@ -156,3 +156,11 @@
       unset MY_KERBEROS_ADMIN_PRINCIPAL
       unset MY_KERBEROS_ADMIN_PASSWORD
     chdir: /tmp
+
+- name: "Kerberos | Start the Kerberos daemons on the primary KDC"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.shell:
+    cmd: |
+      krb5kdc
+      kadmind
