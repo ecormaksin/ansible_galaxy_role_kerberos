@@ -6,102 +6,54 @@
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.apt:
     pkg:
-      - gpg
-      - build-essential
-      - bison
-      - libssl-dev
-      - libkrb5-dev
+      - debconf
+      - debconf-utils
       - expect
     state: present
     update_cache: yes
   tags:
     - packages
 
-- name: "Kerberos | Import and trust GPG public key(s)"
-  ansible.builtin.include_tasks:
-    file: ./roles/kerberos/tasks/gpg_import_trust.yml
-  vars:
-    file_name: "{{ item }}"
-  with_items:
-    - 0CBA08575F8372DF
-    - A32F17FD0055C305
-    - CFE28FC7253AAB87
-
-- name: "Kerberos | Download source code"
+- name: "Kerberos | Check whether Kerberos packages are installed"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.get_url:
-    url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz
-    dest: /usr/local/src
+  ansible.builtin.command: dpkg -l | grep -E "krb5-(admin-server|kdc)"
+  register: kerberos_installed
 
-- name: "Kerberos | Download signature file"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.get_url:
-    url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz.asc
-    dest: /tmp
-
-- name: "Kerberos | Verify source code by GPG"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.command: gpg --verify /tmp/krb5-1.21.3.tar.gz.asc /usr/local/src/krb5-1.21.3.tar.gz
-  register: kerberos_gpg_verify
-
-- name: "Kerberos | Succeeded to verify"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.debug:
-    msg: "GPG検証が成功しました。"
-  when: kerberos_gpg_verify.rc == 0
-
-- name: "Kerberos | Failed to verify"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.debug:
-    msg: "GPG検証が失敗しました。"
-  when: kerberos_gpg_verify.rc != 0
-
-- name: "Kerberos | Unpack source code"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  unarchive:
-    remote_src: yes
-    src: /usr/local/src/krb5-1.21.3.tar.gz
-    dest: /usr/local/src
-
-- name: "Kerberos | Build source code"
+- name: "Kerberos | Install Kerberos packages silently"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.shell:
     cmd: |
-      ./configure
-      make
-      make install
-      make clean
-      make distclean
-    chdir: /usr/local/src/krb5-1.21.3/src
+      DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install krb5-{admin-server,kdc}
+      echo set krb5-config/add_servers true | debconf-communicate
+      echo set krb5-config/add_servers_realm {{ kdc_my_realm }} | debconf-communicate
+      echo set krb5-config/default_realm {{ kdc_my_realm }} | debconf-communicate
+      echo set rb5-config/read_conf true | debconf-communicate
+      echo set krb5-kdc/debconf true | debconf-communicate
+  when: kerberos_installed.rc != 0
 
 - name: "Kerberos | Copy krb5.conf"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.copy:
     src: krb5.conf
-    dest: /usr/local/etc
-    mode: "775"
+    dest: /etc
+    mode: "644"
 
 - name: "Kerberos | Copy kdc.conf"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.copy:
     src: kdc.conf
-    dest: /usr/local/var/krb5kdc
-    mode: "775"
+    dest: /etc/krb5kdc
+    mode: "644"
 
 - name: "Kerberos | Check the Kerberos database"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.stat:
-    path: /usr/local/var/krb5kdc/principal
+    path: /var/lib/krb5kdc/principal
   register: kerberos_database_path
 
 - block:
@@ -133,8 +85,8 @@
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.copy:
     src: kadm5.acl
-    dest: /usr/local/var/krb5kdc
-    mode: "775"
+    dest: /etc/krb5kdc
+    mode: "644"
 
 - name: "Kerberos | Copy an expect script to add administrators to the Kerberos database"
   become: true
@@ -160,7 +112,9 @@
 - name: "Kerberos | Start the Kerberos daemons on the primary KDC"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.shell:
-    cmd: |
-      krb5kdc
-      kadmind
+  ansible.builtin.systemd_service:
+    state: started
+    enabled: true
+    name:
+      - krb5-admin-server
+      - krb5-kdc
