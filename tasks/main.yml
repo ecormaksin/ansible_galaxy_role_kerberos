@@ -14,6 +14,14 @@
   tags:
     - packages
 
+- name: "Kerberos | Create a directory for log files"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.file:
+    path: /var/log/kerberos
+    state: directory
+    mode: "0755"
+
 - name: "Kerberos | Check whether Kerberos packages are installed"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
@@ -29,7 +37,7 @@
       echo set krb5-config/add_servers true | debconf-communicate
       echo set krb5-config/add_servers_realm {{ kdc_my_realm }} | debconf-communicate
       echo set krb5-config/default_realm {{ kdc_my_realm }} | debconf-communicate
-      echo set rb5-config/read_conf true | debconf-communicate
+      echo set krb5-config/read_conf true | debconf-communicate
       echo set krb5-kdc/debconf true | debconf-communicate
   when: kerberos_installed.rc != 0
 
@@ -41,13 +49,15 @@
     dest: /etc
     mode: "644"
 
-- name: "Kerberos | Copy kdc.conf"
+- name: "Kerberos | Replace kdc.conf"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.copy:
-    src: kdc.conf
-    dest: /etc/krb5kdc
-    mode: "644"
+  ansible.builtin.template:
+    src: kdc.conf.j2
+    dest: /etc/krb5kdc/kdc.conf
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: "Kerberos | Check the Kerberos database"
   become: true
