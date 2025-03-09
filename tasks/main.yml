@@ -1,6 +1,15 @@
 ---
 # tasks file for ansible_galaxy_role_kerberos
 
+- name: "Kerberos | Add host to /etc/hosts"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    block: "{{ item.value }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK {{ item.label }}"
+  loop: "{{ kerberos_hosts | flatten(1) }}"
+
 - name: "Kerberos | Install required packages"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
@@ -20,7 +29,16 @@
   ansible.builtin.file:
     path: /var/log/kerberos
     state: directory
-    mode: "0755"
+    mode: "755"
+
+- name: "Kerberos | Copy logrotate config file"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: logrotate-kerberos
+    dest: /etc/logrotate.d/kerberos
+    owner: root
+    mode: "644"
 
 - name: "Kerberos | Check whether Kerberos packages are installed"
   become: true
@@ -28,26 +46,31 @@
   ansible.builtin.command: dpkg -l | grep -E "krb5-(admin-server|kdc)"
   register: kerberos_installed
 
-- name: "Kerberos | Install Kerberos packages silently"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.shell:
-    cmd: |
-      DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install krb5-{admin-server,kdc}
-      echo set krb5-config/add_servers true | debconf-communicate
-      echo set krb5-config/add_servers_realm {{ kdc_my_realm }} | debconf-communicate
-      echo set krb5-config/default_realm {{ kdc_my_realm }} | debconf-communicate
-      echo set krb5-config/read_conf true | debconf-communicate
-      echo set krb5-kdc/debconf true | debconf-communicate
-  when: kerberos_installed.rc != 0
+- block:
+    - name: "Kerberos | Copy an expect script to install Kerberos packages"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.copy:
+        src: install_kerberos_packages.exp
+        dest: /tmp
+        owner: root
+        mode: "775"
 
-- name: "Kerberos | Copy krb5.conf"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.copy:
-    src: krb5.conf
-    dest: /etc
-    mode: "644"
+    - name: "Kerberos | Execute an expect script to install Kerberos packages"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.shell:
+        cmd: |
+          export MY_KERBEROS_DEFAULT_REALM="{{ kdc_my_realm }}"
+          export MY_KERBEROS_SERVERS="{{ kerberos_my_servers }}"
+          export MY_KERBEROS_ADMIN_SERVER="{{ kerberos_my_admin_server }}"
+          ./install_kerberos_packages.exp
+          unset KDC_MY_REALM
+          unset MY_KERBEROS_SERVERS
+          unset MY_KERBEROS_ADMIN_SERVER
+        chdir: /tmp
+
+  when: kerberos_installed.rc != 0
 
 - name: "Kerberos | Replace kdc.conf"
   become: true
@@ -57,7 +80,7 @@
     dest: /etc/krb5kdc/kdc.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "644"
 
 - name: "Kerberos | Check the Kerberos database"
   become: true

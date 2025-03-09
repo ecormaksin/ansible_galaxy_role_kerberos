@@ -1,0 +1,12 @@
+/var/log/kerberos/krb5kdc.log
+/var/log/kerberos/kadmin.log
+/var/log/kerberos/krb5lib.log
+{
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

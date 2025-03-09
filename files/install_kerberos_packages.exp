@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+set default_realm $env(MY_KERBEROS_DEFAULT_REALM)
+set kerberos_servers $env(MY_KERBEROS_SERVERS)
+set admin_kerberos_server $env(MY_KERBEROS_ADMIN_SERVER)
+
+LANG=C DEBIAN_FRONTEND=readline apt -y install krb5-admin-server krb5-kdc
+
+expect "Default Kerberos version 5 realm:"
+send "${default_realm}\r"
+
+expect "Add locations of default Kerberos servers to /etc/krb5.conf? [yes/no]"
+send "yes\r"
+
+expect "Kerberos servers for your realm:"
+send "${kerberos_servers}\r"
+
+expect "Administrative server for your Kerberos realm:"
+send "${admin_kerberos_server}\r"
+
+expect "Create the Kerberos KDC configuration automatically? [yes/no]"
+send "yes\r"
+
+expect eof
