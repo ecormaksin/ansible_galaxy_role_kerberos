@@ -148,6 +148,7 @@
   ansible.builtin.systemd_service:
     state: started
     enabled: true
-    name:
-      - krb5-admin-server
-      - krb5-kdc
+    name: "{{ item }}"
+  with_items:
+    - krb5-kdc
+    - krb5-admin-server
