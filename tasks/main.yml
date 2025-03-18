@@ -6,9 +6,9 @@
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.blockinfile:
     path: /etc/hosts
-    block: "{{ item.value }}"
+    block: "{{ item.ip_address_for_etc_hosts }} {{ item.fqdn }} {{ item.host_name }}"
     marker: "# {mark} ANSIBLE MANAGED BLOCK {{ item.label }}"
-  loop: "{{ kerberos_hosts | flatten(1) }}"
+  loop: "{{ kerberos.servers | flatten(1) }}"
 
 - name: "Kerberos | Install required packages"
   become: true
@@ -61,9 +61,9 @@
       ignore_errors: "{{ ansible_check_mode }}"
       ansible.builtin.shell:
         cmd: |
-          export MY_KERBEROS_DEFAULT_REALM="{{ kdc_my_realm }}"
-          export MY_KERBEROS_SERVERS="{{ kerberos_my_servers }}"
-          export MY_KERBEROS_ADMIN_SERVER="{{ kerberos_my_admin_server }}"
+          export MY_KERBEROS_DEFAULT_REALM="{{ kerberos.kdc_realm }}"
+          export MY_KERBEROS_SERVERS="{{ kerberos.servers | map(attribute='fqdn') | join(' ') }}"
+          export MY_KERBEROS_ADMIN_SERVER="{{ kerberos.servers | selectattr('is_primary', 'true') | map(attribute='fqdn') | first }}"
           ./install_kerberos_packages.exp
           unset KDC_MY_REALM
           unset MY_KERBEROS_SERVERS
@@ -104,8 +104,8 @@
       ignore_errors: "{{ ansible_check_mode }}"
       ansible.builtin.shell:
         cmd: |
-          export KDC_MY_REALM="{{ kdc_my_realm }}"
-          export KDC_MASTER_PASSWORD="{{ kdc_master_password }}"
+          export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
+          export KDC_MASTER_PASSWORD="{{ kerberos.kdc_master_password }}"
           ./create_kdc_database.exp
           unset KDC_MY_REALM
           unset KDC_MASTER_PASSWORD
@@ -135,8 +135,8 @@
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.shell:
     cmd: |
-      export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos_my_admin_principal }}@{{ kdc_my_realm }}"
-      export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos_my_admin_password }}"
+      export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}@{{ kerberos.kdc_realm }}"
+      export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
       ./add_admin_to_kerberos_database.exp
       unset MY_KERBEROS_ADMIN_PRINCIPAL
       unset MY_KERBEROS_ADMIN_PASSWORD
@@ -152,3 +152,10 @@
   with_items:
     - krb5-kdc
     - krb5-admin-server
+
+- name: "Kerberos | Debug host group"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.debug:
+    msg: "{{ group_names }} {{ ansible_play_hosts }} {{ 'TEST' | lower }} {{ fqdn }} {{ kerberos.servers | map(attribute='host_name') | join(' ') }} {{ ansible_host }} {{ kerberos.servers | selectattr('is_primary', 'true') | map(attribute='host_name') | first }}"
+  # when: "'kerberos-primary' in group_names"
