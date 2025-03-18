@@ -1,0 +1,20 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+set realm $env(MY_KERBEROS_REALM)
+set user $env(MY_KERBEROS_ADMIN_PRINCIPAL)
+set password $env(MY_KERBEROS_ADMIN_PASSWORD)
+set server_fqdn $env(MY_KERBEROS_SERVER_FQDN)
+
+spawn kadmin -p ${user} -r ${realm}
+
+expect "Password for ${user}@${realm}:"
+send -- "${password}\r"
+
+expect "kadmin:"
+send "addprinc -randkey host/${server_fqdn}\r"
+
+expect "kadmin:"
+send "quit\r"
+
+expect eof

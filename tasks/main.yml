@@ -157,5 +157,6 @@
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
   ansible.builtin.debug:
-    msg: "{{ group_names }} {{ ansible_play_hosts }} {{ 'TEST' | lower }} {{ fqdn }} {{ kerberos.servers | map(attribute='host_name') | join(' ') }} {{ ansible_host }} {{ kerberos.servers | selectattr('is_primary', 'true') | map(attribute='host_name') | first }}"
-  # when: "'kerberos-primary' in group_names"
+    msg: "{{ item }}"
+  loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
+  when: "'kerberos-primary' in group_names"
