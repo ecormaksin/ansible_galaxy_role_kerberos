@@ -153,10 +153,60 @@
     - krb5-kdc
     - krb5-admin-server
 
-- name: "Kerberos | Debug host group"
+- block:
+    - name: "Kerberos | Copy an expect script to create host keytabs for replica KDCs"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.copy:
+        src: create_host_keytabs_for_replica_kdcs.exp
+        dest: /tmp
+        owner: root
+        mode: "775"
+
+    - name: "Kerberos | Execute an expect script to create host keytabs for replica KDCs"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+      ansible.builtin.shell:
+        cmd: |
+          export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
+          export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}"
+          export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
+          export MY_KERBEROS_SERVER_FQDN="{{ item }}"
+
+          ./create_host_keytabs_for_replica_kdcs.exp
+
+          unset KDC_MY_REALM
+          unset MY_KERBEROS_ADMIN_PRINCIPAL
+          unset MY_KERBEROS_ADMIN_PASSWORD
+          unset MY_KERBEROS_SERVER_FQDN
+        chdir: /tmp
+      loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
+
+  when: "'kerberos-primary' in group_names"
+
+- name: "Kerberos | Copy an expect script to extract host random keys from replica KDCs"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.debug:
-    msg: "{{ item }}"
-  loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
-  when: "'kerberos-primary' in group_names"
+  ansible.builtin.copy:
+    src: extract_host_random_keys_from_replica_kdcs.exp
+    dest: /tmp
+    owner: root
+    mode: "775"
+
+- name: "Kerberos | Execute an expect script to extract host random keys from replica KDCs"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.shell:
+    cmd: |
+      export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
+      export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}"
+      export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
+      export MY_KERBEROS_SERVER_FQDN="{{ fqdn }}"
+
+      ./extract_host_random_keys_from_replica_kdcs.exp
+
+      unset KDC_MY_REALM
+      unset MY_KERBEROS_ADMIN_PRINCIPAL
+      unset MY_KERBEROS_ADMIN_PASSWORD
+      unset MY_KERBEROS_SERVER_FQDN
+    chdir: /tmp

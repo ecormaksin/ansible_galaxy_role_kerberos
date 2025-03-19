@@ -12,7 +12,7 @@ expect "Password for ${user}@${realm}:"
 send -- "${password}\r"
 
 expect "kadmin:"
-send "addprinc -randkey host/${server_fqdn}\r"
+send "ktadd host/${server_fqdn}\r"
 
 expect "kadmin:"
 send "quit\r"
