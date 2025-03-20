@@ -230,3 +230,15 @@
     group: root
     mode: "600"
   when: "'kerberosreplica' in group_names"
+
+- name: "Kerberos | Create kpropd.acl"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.lineinfile:
+    path: /etc/krb5kdc/kpropd.acl
+    line: "host/{{ item }}@{{ kerberos.kdc_realm }}"
+    owner: root
+    group: root
+    mode: "644"
+    create: true
+  loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
