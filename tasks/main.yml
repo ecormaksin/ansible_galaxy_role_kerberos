@@ -182,7 +182,7 @@
         chdir: /tmp
       loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
 
-  when: "'kerberos-primary' in group_names"
+  when: "'kerberosprimary' in group_names"
 
 - name: "Kerberos | Copy an expect script to extract host random keys from replica KDCs"
   become: true
@@ -210,3 +210,23 @@
       unset MY_KERBEROS_ADMIN_PASSWORD
       unset MY_KERBEROS_SERVER_FQDN
     chdir: /tmp
+
+- name: "Kerberos | Download master key stash file from primary server to control node"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.fetch:
+    src: /etc/krb5kdc/stash
+    dest: /tmp/kerberos-master-key-stash
+    flat: true
+  when: "'kerberosprimary' in group_names"
+
+- name: "Kerberos | Copy master key stash file from control node to replica servers"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.copy:
+    src: /tmp/kerberos-master-key-stash
+    dest: /etc/krb5kdc/stash
+    owner: root
+    group: root
+    mode: "600"
+  when: "'kerberosreplica' in group_names"
