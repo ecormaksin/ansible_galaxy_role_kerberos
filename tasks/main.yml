@@ -102,7 +102,6 @@
   ansible.builtin.stat:
     path: /var/lib/krb5kdc/principal
   register: kerberos_database_path
-  when: ('kerberosprimary' in group_names)
 
 - block:
   - name: "Kerberos | Copy an expect script to create KDC database"
@@ -126,7 +125,7 @@
         unset KDC_MASTER_PASSWORD
       chdir: /tmp
 
-  when: ('kerberosprimary' in group_names) and (not kerberos_database_path.stat.exists)
+  when: (not kerberos_database_path.stat.exists)
 
 - name: "Kerberos | Add administrators to the ACL file"
   become: true
