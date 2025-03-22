@@ -1,0 +1,10 @@
+#!/bin/sh
+
+kdclist = "{{ kerberos.servers | rejectattr('is_primary', 'true') | map(attribute='fqdn') | join(' ') }}"
+
+kdb5_util dump /var/lib/krb5kdc/replica_datatrans
+
+for kdc in $kdclist
+do
+    kprop -f /var/lib/krb5kdc/replica_datatrans $kdc
+done

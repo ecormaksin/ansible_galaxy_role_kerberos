@@ -29,6 +29,8 @@
   ansible.builtin.file:
     path: /var/log/kerberos
     state: directory
+    owner: root
+    group: root
     mode: "755"
 
 - name: "Kerberos | Copy logrotate config file"
@@ -43,7 +45,7 @@
 - name: "Kerberos | Check whether Kerberos packages are installed"
   become: true
   ignore_errors: true
-  ansible.builtin.command: dpkg -l | grep -E "krb5-(admin-server|kdc)"
+  ansible.builtin.command: dpkg -l | grep -E "krb5-(admin-server|kdc|kpropd)"
   register: kerberos_installed
 
 - block:
@@ -72,6 +74,18 @@
 
   when: kerberos_installed.rc != 0
 
+- name: "Kerberos | Disable the Kerberos daemons on the replica KDCs"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.systemd_service:
+    state: stopped
+    enabled: false
+    name: "{{ item }}"
+  with_items:
+    - krb5-kdc
+    - krb5-admin-server
+  when: ('kerberosreplica' in group_names)
+
 - name: "Kerberos | Replace kdc.conf"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
@@ -88,101 +102,104 @@
   ansible.builtin.stat:
     path: /var/lib/krb5kdc/principal
   register: kerberos_database_path
+  when: ('kerberosprimary' in group_names)
 
 - block:
-    - name: "Kerberos | Copy an expect script to create KDC database"
-      become: true
-      ignore_errors: "{{ ansible_check_mode }}"
-      ansible.builtin.copy:
-        src: create_kdc_database.exp
-        dest: /tmp
-        owner: root
-        mode: "775"
+  - name: "Kerberos | Copy an expect script to create KDC database"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.copy:
+      src: create_kdc_database.exp
+      dest: /tmp
+      owner: root
+      mode: "775"
 
-    - name: "Kerberos | Execute an expect script to create KDC database"
-      become: true
-      ignore_errors: "{{ ansible_check_mode }}"
-      ansible.builtin.shell:
-        cmd: |
-          export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
-          export KDC_MASTER_PASSWORD="{{ kerberos.kdc_master_password }}"
-          ./create_kdc_database.exp
-          unset KDC_MY_REALM
-          unset KDC_MASTER_PASSWORD
-        chdir: /tmp
+  - name: "Kerberos | Execute an expect script to create KDC database"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.shell:
+      cmd: |
+        export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
+        export KDC_MASTER_PASSWORD="{{ kerberos.kdc_master_password }}"
+        ./create_kdc_database.exp
+        unset KDC_MY_REALM
+        unset KDC_MASTER_PASSWORD
+      chdir: /tmp
 
-  when: (not kerberos_database_path.stat.exists)
+  when: ('kerberosprimary' in group_names) and (not kerberos_database_path.stat.exists)
 
 - name: "Kerberos | Add administrators to the ACL file"
   become: true
   ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.copy:
-    src: kadm5.acl
-    dest: /etc/krb5kdc
+  ansible.builtin.template:
+    src: kadm5.acl.j2
+    dest: /etc/krb5kdc/kadm5.acl
+    owner: root
+    group: root
     mode: "644"
 
-- name: "Kerberos | Copy an expect script to add administrators to the Kerberos database"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.copy:
-    src: add_admin_to_kerberos_database.exp
-    dest: /tmp
-    owner: root
-    mode: "775"
-
-- name: "Kerberos | Execute an expect script to add administrators to the Kerberos database"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.shell:
-    cmd: |
-      export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}@{{ kerberos.kdc_realm }}"
-      export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
-      ./add_admin_to_kerberos_database.exp
-      unset MY_KERBEROS_ADMIN_PRINCIPAL
-      unset MY_KERBEROS_ADMIN_PASSWORD
-    chdir: /tmp
-
-- name: "Kerberos | Start the Kerberos daemons on the primary KDC"
-  become: true
-  ignore_errors: "{{ ansible_check_mode }}"
-  ansible.builtin.systemd_service:
-    state: started
-    enabled: true
-    name: "{{ item }}"
-  with_items:
-    - krb5-kdc
-    - krb5-admin-server
-
 - block:
-    - name: "Kerberos | Copy an expect script to create host keytabs for replica KDCs"
-      become: true
-      ignore_errors: "{{ ansible_check_mode }}"
-      ansible.builtin.copy:
-        src: create_host_keytabs_for_replica_kdcs.exp
-        dest: /tmp
-        owner: root
-        mode: "775"
+  - name: "Kerberos | Copy an expect script to add administrators to the Kerberos database"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.copy:
+      src: add_admin_to_kerberos_database.exp
+      dest: /tmp
+      owner: root
+      mode: "775"
 
-    - name: "Kerberos | Execute an expect script to create host keytabs for replica KDCs"
-      become: true
-      ignore_errors: "{{ ansible_check_mode }}"
-      ansible.builtin.shell:
-        cmd: |
-          export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
-          export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}"
-          export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
-          export MY_KERBEROS_SERVER_FQDN="{{ item }}"
+  - name: "Kerberos | Execute an expect script to add administrators to the Kerberos database"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.shell:
+      cmd: |
+        export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}@{{ kerberos.kdc_realm }}"
+        export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
+        ./add_admin_to_kerberos_database.exp
+        unset MY_KERBEROS_ADMIN_PRINCIPAL
+        unset MY_KERBEROS_ADMIN_PASSWORD
+      chdir: /tmp
 
-          ./create_host_keytabs_for_replica_kdcs.exp
+  - name: "Kerberos | Start the Kerberos daemons on the primary KDC"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.systemd_service:
+      state: started
+      enabled: true
+      name: "{{ item }}"
+    with_items:
+      - krb5-kdc
+      - krb5-admin-server
 
-          unset KDC_MY_REALM
-          unset MY_KERBEROS_ADMIN_PRINCIPAL
-          unset MY_KERBEROS_ADMIN_PASSWORD
-          unset MY_KERBEROS_SERVER_FQDN
-        chdir: /tmp
-      loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
+  - name: "Kerberos | Copy an expect script to create host keytabs for replica KDCs"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.copy:
+      src: create_host_keytabs_for_replica_kdcs.exp
+      dest: /tmp
+      owner: root
+      mode: "775"
 
-  when: "'kerberosprimary' in group_names"
+  - name: "Kerberos | Execute an expect script to create host keytabs for replica KDCs"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.shell:
+      cmd: |
+        export KDC_MY_REALM="{{ kerberos.kdc_realm }}"
+        export MY_KERBEROS_ADMIN_PRINCIPAL="{{ kerberos.admin_principal }}"
+        export MY_KERBEROS_ADMIN_PASSWORD="{{ kerberos.admin_password }}"
+        export MY_KERBEROS_SERVER_FQDN="{{ item }}"
+
+        ./create_host_keytabs_for_replica_kdcs.exp
+
+        unset KDC_MY_REALM
+        unset MY_KERBEROS_ADMIN_PRINCIPAL
+        unset MY_KERBEROS_ADMIN_PASSWORD
+        unset MY_KERBEROS_SERVER_FQDN
+      chdir: /tmp
+    loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
+
+  when: ('kerberosprimary' in group_names)
 
 - name: "Kerberos | Copy an expect script to extract host random keys from replica KDCs"
   become: true
@@ -218,7 +235,7 @@
     src: /etc/krb5kdc/stash
     dest: /tmp/kerberos-master-key-stash
     flat: true
-  when: "'kerberosprimary' in group_names"
+  when: ('kerberosprimary' in group_names)
 
 - name: "Kerberos | Copy master key stash file from control node to replica servers"
   become: true
@@ -229,7 +246,7 @@
     owner: root
     group: root
     mode: "600"
-  when: "'kerberosreplica' in group_names"
+  when: ('kerberosreplica' in group_names)
 
 - name: "Kerberos | Create kpropd.acl"
   become: true
@@ -242,3 +259,36 @@
     mode: "644"
     create: true
   loop: "{{ kerberos.servers | map(attribute='fqdn') | flatten(1) }}"
+
+- block:
+
+  - name: "Kerberos | Copy script to propagate the database to each replica KDC"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.template:
+      src: propagate_database.sh.j2
+      dest: /etc/krb5kdc/propagate_database.sh
+      owner: root
+      group: root
+      mode: "755"
+
+  - name: "Kerberos | Set cron job to propagate the database to each replica KDC"
+    become: true
+    ignore_errors: "{{ ansible_check_mode }}"
+    ansible.builtin.cron:
+      name: "Propagate the database to each replica KDC"
+      minute: "2"
+      job: "/etc/krb5kdc/propagate_database.sh"
+
+  when: ('kerberosprimary' in group_names)
+
+- name: "Kerberos | Start the Kerberos daemons on the replica KDCs"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  ansible.builtin.systemd_service:
+    state: started
+    enabled: true
+    name: "{{ item }}"
+  with_items:
+    - krb5-kdc
+  when: ('kerberosreplica' in group_names)
